@@ -1,0 +1,3 @@
+EbookLib
+bs4
+flask-cors

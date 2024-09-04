@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB Reader</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            height: 100%;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #f0f0f0;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hidden {
+            display: none;
+        }
+        #fullscreenBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <input type="file" id="fileInput" accept=".epub">
+        <select id="bookSelect"></select>
+        <button id="toggleSidebar">Toggle Sidebar</button>
+    </div>
+    <div class="container">
+        <div id="sidebar" class="sidebar">
+            <h2>Table of Contents</h2>
+            <ul id="toc"></ul>
+        </div>
+        <div id="content" class="content"></div>
+    </div>
+    <button id="fullscreenBtn">Fullscreen</button>
+
+    <script>
+        let currentBook = null;
+        let currentChapter = 0;
+        
+        document.getElementById('fileInput').addEventListener('change', uploadFile);
+        document.getElementById('bookSelect').addEventListener('change', loadBook);
+        document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
+        document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') prevChapter();
+            if (e.code === 'ArrowRight') nextChapter();
+            if (e.code === 'Space') {
+                e.preventDefault();
+                nextChapter();
+            }
+        });
+
+        function uploadFile(event) {
+            const file = event.target.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                loadBooks();
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+
+        function loadBooks() {
+            fetch('/books')
+            .then(response => response.json())
+            .then(books => {
+                const select = document.getElementById('bookSelect');
+                select.innerHTML = '<option value="">Select a book</option>';
+                books.forEach(book => {
+                    const option = document.createElement('option');
+                    option.value = book.id;
+                    option.textContent = book.title;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function loadBook(event) {
+            const bookId = event.target.value;
+            if (!bookId) return;
+
+            currentBook = bookId;
+            fetch(`/front/parsed/${bookId}/toc.html`)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const toc = doc.querySelector('ul');
+                document.getElementById('toc').innerHTML = toc.innerHTML;
+
+                const chapters = Array.from(toc.querySelectorAll('a'));
+                chapters.forEach((chapter, index) => {
+                    chapter.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        loadChapter(index);
+                    });
+                });
+
+                const lastChapter = localStorage.getItem(`lastChapter_${bookId}`);
+                loadChapter(lastChapter ? parseInt(lastChapter) : 0);
+            });
+        }
+
+        function loadChapter(index) {
+            currentChapter = index;
+            const chapters = document.querySelectorAll('#toc a');
+            if (index < 0) index = 0;
+            if (index >= chapters.length) index = chapters.length - 1;
+
+            const chapterUrl = chapters[index].getAttribute('href');
+            fetch(`/front/parsed/${currentBook}/${chapterUrl}`)
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById('content').innerHTML = html;
+                localStorage.setItem(`lastChapter_${currentBook}`, index);
+            });
+        }
+
+        function prevChapter() {
+            loadChapter(currentChapter - 1);
+        }
+
+        function nextChapter() {
+            loadChapter(currentChapter + 1);
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('hidden');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        loadBooks();
+    </script>
+</body>
+</html>
