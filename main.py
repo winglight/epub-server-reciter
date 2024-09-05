@@ -64,7 +64,10 @@ def parse_epub(filepath, book_id):
             with open(os.path.join(book_folder, chapter_filename), 'w', encoding='utf-8') as f:
                 f.write(str(soup))
         elif item.get_type() == ebooklib.ITEM_IMAGE:
-            with open(os.path.join(book_folder, item.get_name()), 'wb') as f:
+            filepath = os.path.join(book_folder, item.get_name())
+            folder_path = os.path.dirname(filepath)
+            os.makedirs(folder_path, exist_ok=True)
+            with open(filepath, 'wb') as f:
                 f.write(item.get_content())
 
     # Generate table of contents
